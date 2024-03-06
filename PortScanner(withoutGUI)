@@ -1,0 +1,67 @@
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class PortScanner {
+
+    public void runPortScan(String ip, int startPort, int endPort, int poolSize, int timeout) {
+        ConcurrentLinkedQueue<Integer> openPorts = new ConcurrentLinkedQueue<>();
+        ExecutorService executorService = Executors.newFixedThreadPool(poolSize);
+        AtomicInteger port = new AtomicInteger(startPort);
+        while (port.get() <= endPort) {
+            final int currentPort = port.getAndIncrement();
+            executorService.submit(() -> {
+                try {
+                    Socket socket = new Socket();
+                    socket.connect(new InetSocketAddress(ip, currentPort), timeout);
+                    socket.close();
+                    openPorts.add(currentPort);
+                    System.out.println(ip + ", port open: " + currentPort);
+                } catch (SocketTimeoutException e) {
+                    // Ignore connection timeout errors
+                } catch (IOException e) {
+                    System.err.println("Error occurred while scanning port " + currentPort + ": " + e.getMessage());
+                }
+            });
+        }
+        executorService.shutdown();
+        try {
+            executorService.awaitTermination(10, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        List<Integer> openPortList = new ArrayList<>();
+        while (!openPorts.isEmpty()) {
+            openPortList.add(openPorts.poll());
+        }
+        openPortList.forEach(p -> System.out.println("Port " + p + " is open"));
+    }
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.print("Enter the IP address to scan: ");
+        String ip = scanner.nextLine();
+
+        System.out.print("Enter the starting port number: ");
+        int startPort = scanner.nextInt();
+
+        System.out.print("Enter the ending port number: ");
+        int endPort = scanner.nextInt();
+
+        System.out.print("Enter the number of threads: ");
+        int poolSize = scanner.nextInt();
+
+        PortScanner portScanner = new PortScanner();
+        portScanner.runPortScan(ip, startPort, endPort, poolSize, 1000); // Timeout set to 1000 milliseconds
+    }
+}
